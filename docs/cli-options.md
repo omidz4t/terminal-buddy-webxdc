@@ -143,6 +143,20 @@ DC_INVITE='https://i.delta.chat/#DEADBEEF&v=3&...'
 
 ---
 
+## Docker (GHCR)
+
+Runtime image is **Debian 13**; the binary is built in CI and copied into the image (no Rust rebuild).
+
+```bash
+# TUI needs a TTY: -it
+docker run --rm -it \
+  -v terminalbuddy-data:/data \
+  ghcr.io/omidz4t/terminal-buddy-webxdc:latest \
+  serve --invite 'https://i.delta.chat/#…' --allowed-commands ls,cat,pwd,whoami
+```
+
+See root [README](../README.md#docker-ghcr--debian-13) for more.
+
 ## Related
 
 - [Agent](./agent.md) — TUI tabs, Share, restricted shell internals  

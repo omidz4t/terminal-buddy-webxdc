@@ -24,7 +24,7 @@ Host a real shell on a machine, ship a mini app into a chat, and let people type
 
 | | |
 |---|---|
-| **Version** | `0.1.0` (see [`VERSION`](./VERSION)) |
+| **Version** | `0.1.1` (see [`VERSION`](./VERSION)) |
 | **Repo** | [github.com/omidz4t/terminal-buddy-webxdc](https://github.com/omidz4t/terminal-buddy-webxdc) |
 | **Host** | Rust agent + Ratatui TUI (`agent/`) |
 | **Client** | Preact + xterm.js webxdc (`webxdc/`) |
@@ -40,6 +40,36 @@ Download the latest **release binary** (mini app is already embedded), make it e
 ```bash
 wget -qO terminalbuddy https://github.com/omidz4t/terminal-buddy-webxdc/releases/latest/download/terminalbuddy-linux-x86_64 && chmod +x terminalbuddy && ./terminalbuddy serve
 ```
+
+### Docker (GHCR · Debian 13)
+
+Image is built in CI from the **same** release binary (no second Rust compile). Use **`-it`** so the TUI has a TTY:
+
+```bash
+# Pull + run TUI (interactive terminal)
+docker run --rm -it \
+  -v terminalbuddy-data:/data \
+  ghcr.io/omidz4t/terminal-buddy-webxdc:latest \
+  serve
+
+# Invite + whitelist (recommended)
+docker run --rm -it \
+  -v terminalbuddy-data:/data \
+  ghcr.io/omidz4t/terminal-buddy-webxdc:latest \
+  serve \
+    --invite 'https://i.delta.chat/#FINGERPRINT&v=3&x=…&i=…&s=…&a=user%40nine.testrun.org&n=2&g=MyGroup' \
+    --allowed-commands ls,cat,pwd,whoami,uname,date,echo
+
+# Headless (no TUI) — drop -t if you only need logs
+docker run --rm -i \
+  -v terminalbuddy-data:/data \
+  ghcr.io/omidz4t/terminal-buddy-webxdc:0.1.1 \
+  serve --no-tui --invite 'https://i.delta.chat/#…' --allowed-commands ls,pwd,whoami
+```
+
+- **`-it`** — required to see / use the Ratatui dashboard  
+- **`-v terminalbuddy-data:/data`** — persists identity under `/data` (`.dc-agent`)  
+- Tags: `latest`, `0.1.0` (or whatever version the release published)
 
 ```bash
 ./terminalbuddy --version
@@ -236,6 +266,7 @@ Docs: [shell-policy](./docs/shell-policy.md), [access-control](./docs/access-con
 ```text
 .
 ├── VERSION                 # project version
+├── Dockerfile              # Debian 13 runtime (COPY prebuilt binary only)
 ├── Makefile
 ├── .env.example
 ├── assets/                 # brand art + icon source
@@ -292,22 +323,27 @@ Workflow: [`.github/workflows/release.yml`](./.github/workflows/release.yml)
 
 | Event | What happens |
 |-------|----------------|
-| Push to `main` | Build `terminalbuddy-linux-x86_64` (artifact) |
-| Push tag `v*` (e.g. `v0.1.0`) | Build + **GitHub Release** with the binary attached |
-| Manual `workflow_dispatch` | Same build path |
+| Push to `main` | Build → **GitHub Release** `v$(cat VERSION)` + GHCR image `:VERSION` and `:latest` |
+| Push tag `v*` | Same (version taken from the tag) |
+| Manual `workflow_dispatch` | Same |
 
-Publish a release:
+Release notes include **TerminalBuddy version**, **git commit**, **Rust toolchain**, and the exact **chatmail/core (deltachat)** package version + commit used for the build.
+
+**Docker reuses the CI binary** (`Dockerfile` only `COPY dist/terminalbuddy` onto Debian 13 — no second `cargo build`).
 
 ```bash
-# bump VERSION / Cargo.toml as needed, then:
-git tag v0.1.0
-git push origin v0.1.0
+# bump VERSION, then push main (or tag) to publish
+echo 0.1.1 > VERSION
+git commit -am "release 0.1.1"
+git push origin main
+# optional explicit tag:
+git tag v0.1.1 && git push origin v0.1.1
 ```
 
-Asset name expected by the one-liner:
+Assets:
 
-`https://github.com/omidz4t/terminal-buddy-webxdc/releases/latest/download/terminalbuddy-linux-x86_64`
-
+- Binary: `https://github.com/omidz4t/terminal-buddy-webxdc/releases/latest/download/terminalbuddy-linux-x86_64`
+- Image: `ghcr.io/omidz4t/terminal-buddy-webxdc:0.1.1`
 ---
 
 ## Licence

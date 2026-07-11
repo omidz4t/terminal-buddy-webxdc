@@ -1,9 +1,8 @@
-# Build TerminalBuddy with embedded webxdc and publish Linux binaries to GitHub Releases.
+# Build TerminalBuddy once (webxdc + Rust), then:
+#   - publish a versioned GitHub Release (main + tags + manual)
+#   - package the same binary into a Debian 13 image and push to GHCR
 #
-# Triggers:
-#   - push tag v*          → create/update a GitHub Release with assets
-#   - workflow_dispatch    → build artifacts only (or release if tag-like input set)
-#   - push main            → build + upload workflow artifacts (smoke)
+# Docker does NOT recompile Rust — it only COPYs dist/terminalbuddy.
 
 name: Release
 
@@ -14,24 +13,23 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish a draft release (uses VERSION file as tag vX.Y.Z if no tag)"
+        description: "Force GHCR push (releases always publish)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
-  # Match chatmail/core CI (edition 2024 / MSRV stack)
   RUST_VERSION: "1.95.0"
-  CORE_REPO: https://github.com/chatmail/core.git
-  # Pin for reproducible builds; bump when you intentionally update core.
   CORE_REF: main
+  REGISTRY: ghcr.io
 
 jobs:
   linux-x86_64:
-    name: Build linux-x86_64
+    name: Build binary + Docker (reuse binary)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -78,7 +76,8 @@ jobs:
         working-directory: terminalbuddy
         run: make build
 
-      - name: Name release asset
+      - name: Name release asset + versions (app + core)
+        id: ver
         working-directory: terminalbuddy
         run: |
           set -euo pipefail
@@ -87,6 +86,50 @@ jobs:
           ./dist/terminalbuddy --version
           ls -lah dist/
 
+          # Project version from VERSION file (or git tag vX.Y.Z)
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+          fi
+          if [[ -z "${VERSION}" ]]; then
+            echo "VERSION is empty" >&2
+            exit 1
+          fi
+          TAG_NAME="v${VERSION}"
+
+          # chatmail/core (deltachat) pin used for this build
+          CORE_DIR="context/deltachat-core-rust"
+          CORE_PKG="$(sed -n 's/^version = "\(.*\)"/\1/p' "${CORE_DIR}/Cargo.toml" | head -n1)"
+          CORE_COMMIT="$(git -C "${CORE_DIR}" rev-parse HEAD)"
+          CORE_SHORT="$(git -C "${CORE_DIR}" rev-parse --short HEAD)"
+          CORE_BRANCH="$(git -C "${CORE_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+          if [[ -z "${CORE_BRANCH}" || "${CORE_BRANCH}" == "HEAD" ]]; then
+            CORE_BRANCH="${CORE_REF}"
+          fi
+          CORE_URL="https://github.com/chatmail/core/tree/${CORE_COMMIT}"
+
+          IMAGE_BASE="${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+
+          {
+            echo "version=${VERSION}"
+            echo "tag_name=${TAG_NAME}"
+            echo "image=${IMAGE_BASE}"
+            echo "core_pkg=${CORE_PKG}"
+            echo "core_commit=${CORE_COMMIT}"
+            echo "core_short=${CORE_SHORT}"
+            echo "core_branch=${CORE_BRANCH}"
+            echo "core_url=${CORE_URL}"
+            echo "core_ref_requested=${CORE_REF}"
+            echo "rust_version=${RUST_VERSION}"
+            echo "git_sha=${GITHUB_SHA}"
+            echo "git_sha_short=$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Release tag: ${TAG_NAME}"
+          echo "Core: ${CORE_PKG} @ ${CORE_SHORT} (${CORE_BRANCH})"
+          echo "Image: ${IMAGE_BASE}:${VERSION}"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -94,33 +137,86 @@ jobs:
           path: terminalbuddy/dist/terminalbuddy-linux-x86_64
           if-no-files-found: error
 
-      - name: Publish GitHub Release (tags)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Always publish a versioned GitHub Release (main, tags, workflow_dispatch).
+      # Previously this was skipped on main because of: if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag_name }}
+          name: TerminalBuddy ${{ steps.ver.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           files: terminalbuddy/dist/terminalbuddy-linux-x86_64
-          generate_release_notes: true
           fail_on_unmatched_files: true
+          generate_release_notes: true
+          make_latest: true
           body: |
-            ## TerminalBuddy `${{ github.ref_name }}`
+            ## TerminalBuddy `${{ steps.ver.outputs.tag_name }}`
 
             Single binary with the mini app **embedded** — no separate `.xdc` needed.
 
-            ### One-line install (Linux x86_64)
+            | | |
+            |---|---|
+            | **TerminalBuddy version** | `${{ steps.ver.outputs.version }}` |
+            | **Git commit** | `${{ steps.ver.outputs.git_sha_short }}` (`${{ steps.ver.outputs.git_sha }}`) |
+            | **Rust toolchain** | `${{ steps.ver.outputs.rust_version }}` |
+            | **chatmail/core (deltachat)** | **`${{ steps.ver.outputs.core_pkg }}`** @ `${{ steps.ver.outputs.core_short }}` |
+            | **core branch/ref** | `${{ steps.ver.outputs.core_branch }}` (requested: `${{ steps.ver.outputs.core_ref_requested }}`) |
+            | **core commit** | [`${{ steps.ver.outputs.core_commit }}`](${{ steps.ver.outputs.core_url }}) |
+            | **Container image** | `ghcr.io/omidz4t/terminal-buddy-webxdc:${{ steps.ver.outputs.version }}` |
+
+            ### Binary (Linux x86_64)
 
             ```bash
             wget -qO terminalbuddy https://github.com/omidz4t/terminal-buddy-webxdc/releases/latest/download/terminalbuddy-linux-x86_64 && chmod +x terminalbuddy && ./terminalbuddy serve
             ```
 
+            ### Docker (GHCR, Debian 13 — same binary, no recompile)
+
             ```bash
-            ./terminalbuddy --version
-            # whitelist (not YOLO) + join from invite
-            ./terminalbuddy serve \
-              --invite 'https://i.delta.chat/#…' \
-              --allowed-commands ls,cat,pwd,whoami,uname
+            docker run --rm -it \
+              -v terminalbuddy-data:/data \
+              ghcr.io/omidz4t/terminal-buddy-webxdc:${{ steps.ver.outputs.version }} \
+              serve --invite 'https://i.delta.chat/#…' --allowed-commands ls,cat,pwd,whoami
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Optional: macOS later — keep job commented until runners are desired.
-  # macos-aarch64: ...
+      # ── Docker: package the already-built binary (no second Rust build) ──
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker tags
+        id: tags
+        run: |
+          set -euo pipefail
+          IMAGE="${{ steps.ver.outputs.image }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          TAGS="${IMAGE}:${VERSION}"$'\n'"${IMAGE}:latest"
+          {
+            echo "list<<EOF"
+            echo "${TAGS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "tags:"
+          echo "${TAGS}"
+
+      - name: Build & push image (COPY dist binary only — no cargo)
+        uses: docker/build-push-action@v6
+        with:
+          context: terminalbuddy
+          file: terminalbuddy/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          labels: |
+            org.opencontainers.image.title=TerminalBuddy
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+            org.opencontainers.image.revision=${{ steps.ver.outputs.git_sha }}

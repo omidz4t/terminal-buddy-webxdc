@@ -1,0 +1,5 @@
+# Keep docker context tiny — only need Dockerfile + prebuilt binary.
+**
+!dist/
+!dist/terminalbuddy
+!Dockerfile
