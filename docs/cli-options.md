@@ -118,7 +118,7 @@ These work with the binary and with `make run-agent` / `make run-agent-inv` (fro
 
 | Variable | Meaning |
 |----------|---------|
-| **`DC_AGENT_SERVER`** | Chatmail / account bootstrap server (default `nine.testrun.org`) |
+| **`DC_AGENT_SERVER`** | Chatmail host used **only on first account creation** (default `nine.testrun.org`). Any chatmail-compatible server works — registration is `DCACCOUNT:<server>` (server `/new`). Examples: `mail.example.org`, `https://mail.example.org`. Ignored once `.dc-agent/` is already configured. |
 | **`DC_AGENT_SHELL`** | Plain shell binary when not using tmux / restricted shell |
 | **`DC_USE_TMUX=1`** | Same as `--tmux` |
 | **`DC_TMUX_SESSION`** | tmux session name (default `terminalbuddy`) |
@@ -128,6 +128,17 @@ These work with the binary and with `make run-agent` / `make run-agent-inv` (fro
 | **`DC_FORCE_JOIN`** | `1` = force SecureJoin; `0` = may reuse existing group |
 | **`DC_XDC`** | Override path to `.xdc` (else embedded / CLI path) |
 | **`DC_NO_TUI=1`** | Same as `--no-tui` (headless host) |
+
+### Custom account server
+
+You are **not** required to use `nine.testrun.org`. Set `DC_AGENT_SERVER` to your chatmail host **before** the first configure:
+
+```bash
+export DC_AGENT_SERVER=mail.example.org
+./terminalbuddy serve --allowed-commands ls,cat,pwd
+```
+
+There is no `--server` CLI flag — env / `.env` only. To re-register on another server, delete (or move) the agent profile data (`.dc-agent` / Docker volume) and start again with the new host. Full notes: [Getting started — Account server](./getting-started.md#account-server-not-locked-to-ninetestrunorg).
 
 ### Quote rule for invites
 

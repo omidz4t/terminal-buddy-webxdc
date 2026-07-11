@@ -20,7 +20,7 @@
 |----------|----------|--------|
 | `DC_INVITE` | for group host | **Single-quoted** invite URL |
 | `DC_FORCE_JOIN` | recommended `1` when changing groups | SecureJoin on serve |
-| `DC_AGENT_SERVER` | no | Default `nine.testrun.org` |
+| `DC_AGENT_SERVER` | no | Chatmail host for first-time register only (default `nine.testrun.org`). Any chatmail server: e.g. `mail.example.org` — uses `DCACCOUNT:` / that server’s `/new`. |
 | `DC_USE_TMUX` | no | `1` / `true` / `yes` enable tmux |
 | `DC_TMUX_SESSION` | no | Default `terminalbuddy` |
 | `DC_AGENT_SHELL` | no | Plain shell binary |

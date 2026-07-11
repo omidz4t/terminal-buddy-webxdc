@@ -143,7 +143,7 @@ More detail: [docs/architecture.md](./docs/architecture.md), [docs/protocol.md](
 - **Node.js + npm** (webxdc build)
 - **`zip`** (packs the `.xdc`)
 - Optional: **`tmux`** (off by default)
-- A Delta Chat / chatmail account (default bootstrap server: `nine.testrun.org`)
+- A Delta Chat / chatmail account — created on first run (default server: `nine.testrun.org`; override with **`DC_AGENT_SERVER`**, see [Account server](./docs/getting-started.md#account-server-not-locked-to-ninetestrunorg))
 
 The agent expects a local checkout of **deltachat-core-rust** at `context/deltachat-core-rust` (path dependency; gitignored clone).
 
@@ -227,7 +227,7 @@ The release binary **embeds** `terminalbuddy.xdc` — no separate file needed to
 
 | Variable | Used by | Notes |
 |----------|---------|--------|
-| `DC_AGENT_SERVER` | both | Default `nine.testrun.org` |
+| `DC_AGENT_SERVER` | both | First-time account host only (default `nine.testrun.org`). Use your chatmail host, e.g. `mail.example.org` — registers via `DCACCOUNT:` / that server’s `/new` |
 | `DC_INVITE` | **run-agent-inv only** | SecureJoin URL — **single-quoted** |
 | `DC_FORCE_JOIN` | run-agent-inv | `1` = re-join even if a group already exists |
 | `DC_USE_TMUX` | both | `1` → start with tmux |

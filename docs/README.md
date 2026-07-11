@@ -6,7 +6,7 @@ Shared terminal over **Delta Chat webxdc realtime**: people open the mini app in
 
 | Doc | What it covers |
 |-----|----------------|
-| [Getting started](./getting-started.md) | Clone layout, `.env`, `make run-agent`, first join |
+| [Getting started](./getting-started.md) | Clone layout, `.env`, custom account server (`DC_AGENT_SERVER` / `/new`), `make run-agent`, first join |
 | [CLI options](./cli-options.md) | All binary commands, flags, env vars, examples |
 | [Architecture](./architecture.md) | Host vs peers, who sends what |
 | [Protocol](./protocol.md) | Binary frames + presence JSON |

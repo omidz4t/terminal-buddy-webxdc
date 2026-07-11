@@ -46,7 +46,7 @@ serve [app.xdc] [--invite URL] [--force-join] [--allowed-commands a,b,c] [--tmux
 | `DC_TMUX_SESSION` | `terminalbuddy` | tmux session name |
 | `DC_AGENT_SHELL` | `$SHELL` | Plain shell when not tmux/restricted |
 | `DC_INVITE` + `DC_BOOTSTRAP_INVITE=1` | — | Env bootstrap (e.g. `make run-agent-inv`) |
-| `DC_AGENT_SERVER` | `nine.testrun.org` | Account bootstrap server |
+| `DC_AGENT_SERVER` | `nine.testrun.org` | Chatmail host for **first-time** account creation only (`DCACCOUNT:` → server `/new`). Set to e.g. `mail.example.org` to avoid nine.testrun.org. Ignored if already configured. |
 
 ### Shell modes
 
