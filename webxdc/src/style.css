@@ -1,0 +1,609 @@
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * Mobile keyboard: pin layout to visualViewport via CSS vars set in
+ * useVisualViewport (--app-height/top/left/width). When the keyboard opens,
+ * height shrinks and top may shift so the whole UI rides up above it.
+ */
+:root {
+  --app-height: 100dvh;
+  --app-width: 100%;
+  --app-top: 0px;
+  --app-left: 0px;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #0b0f14;
+  color: #e6edf3;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  /* Stop iOS from rubber-banding the page under the keyboard. */
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* Preact root — fills the *visible* viewport (above the keyboard). */
+#app {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: var(--app-top);
+  left: var(--app-left);
+  width: var(--app-width);
+  height: var(--app-height);
+  max-height: var(--app-height);
+  overflow: hidden;
+}
+
+/* Compact chrome when the keyboard eats space. */
+html.keyboard-open #titlebar {
+  padding: 4px 10px;
+  min-height: 34px;
+}
+
+html.keyboard-open .titlebar-title-slide {
+  font-size: 12px;
+}
+
+html.keyboard-open .titlebar-brand {
+  padding: 2px 5px;
+  font-size: 9px;
+}
+
+.setup-error {
+  color: #ff7b72;
+  padding: 12px;
+  white-space: pre-wrap;
+  font: 13px monospace;
+  margin: 0;
+}
+
+/* Host approve-mode: peers wait while a command is gated */
+.cmd-wait-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgb(11 15 20 / 0.72);
+  pointer-events: none;
+}
+
+.cmd-wait-card {
+  max-width: min(420px, 92vw);
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #1a2330;
+  border: 1px solid #3d4f66;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+  text-align: center;
+}
+
+.cmd-wait-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #d29922;
+  margin-bottom: 10px;
+}
+
+.cmd-wait-cmd code {
+  display: block;
+  font: 13px ui-monospace, monospace;
+  color: #e6edf3;
+  background: #0b0f14;
+  padding: 10px 12px;
+  border-radius: 8px;
+  word-break: break-all;
+}
+
+.cmd-wait-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.cmd-wait-hint kbd {
+  background: #243041;
+  border: 1px solid #3d4f66;
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+#titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #1a2330 0%, #121820 100%);
+  border-bottom: 1px solid #243041;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 50;
+  min-height: 40px;
+}
+
+/* Compact brand chip — events live in the sliding title slot. */
+.titlebar-brand {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #8b9cb3;
+  background: #1e2a3a;
+  border: 1px solid #3d4f66;
+  border-radius: 6px;
+  padding: 3px 6px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+/* Sliding event title (ping / connected / …) */
+.titlebar-title-slot {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  height: 1.35em;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.titlebar-title-slide {
+  display: block;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
+  will-change: transform, opacity;
+}
+
+.titlebar-title-slide.is-out {
+  transform: translateY(-110%);
+  opacity: 0;
+}
+
+.titlebar-title-slide.is-in {
+  animation: titlebar-slide-in 0.22s ease both;
+}
+
+@keyframes titlebar-slide-in {
+  from {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+#status[data-state="ok"],
+.titlebar-title-slide[data-state="ok"] {
+  color: #7ee787;
+}
+#status[data-state="wait"],
+.titlebar-title-slide[data-state="wait"] {
+  color: #d29922;
+}
+
+/* Legacy hint removed from layout — status is the title now */
+#alt-hint {
+  display: none;
+}
+
+/* Top-right ⋮ menu (far right) */
+.titlebar-menu-wrap {
+  position: relative;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.titlebar-menu-btn {
+  border: 1px solid #3d4f66;
+  background: #1e2a3a;
+  color: #e6edf3;
+  border-radius: 8px;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.titlebar-menu-btn:active {
+  background: #2a3a50;
+}
+
+.titlebar-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-width: min(280px, 92vw);
+  background: #1a2330;
+  border: 1px solid #3d4f66;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.45);
+  padding: 6px;
+  z-index: 60;
+}
+
+.titlebar-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #e6edf3;
+  padding: 10px 10px 10px 28px;
+  position: relative;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.titlebar-menu-item:hover,
+.titlebar-menu-item:active {
+  background: #243041;
+}
+
+.titlebar-menu-check {
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  width: 16px;
+  color: #7ee787;
+  font-weight: 700;
+}
+
+.titlebar-menu-sub {
+  font-size: 11px;
+  opacity: 0.65;
+  line-height: 1.3;
+}
+
+/* Soft keys above keyboard (phone) */
+.extra-keys {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  /* Home-indicator inset only when keyboard is closed; visualViewport already
+     sits above the keyboard, so safe-area bottom would leave a dead gap on iOS. */
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: #121820;
+  border-top: 1px solid #243041;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 45;
+}
+
+html.keyboard-open .extra-keys {
+  padding: 4px 6px 4px;
+}
+
+.extra-key {
+  flex: 0 0 auto;
+  min-width: 40px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #3d4f66;
+  border-radius: 8px;
+  background: #1e2a3a;
+  color: #e6edf3;
+  font: 600 13px system-ui, sans-serif;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.extra-key:active {
+  background: #2f425a;
+}
+
+.extra-key--toggle.is-on {
+  background: #264f78;
+  border-color: #58a6ff;
+  color: #fff;
+  box-shadow: 0 0 0 1px #58a6ff inset;
+}
+
+#alt-hint kbd {
+  background: #243041;
+  border: 1px solid #3d4f66;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+
+#main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+#stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Absolute fill so FitAddon always measures a real box on resize. */
+#terminal {
+  position: absolute;
+  inset: 0;
+  padding: 6px;
+  overflow: hidden;
+  /* Stable cursor — avoid xterm/theme flipping the OS cursor under the mouse. */
+  cursor: text;
+}
+
+#terminal .xterm {
+  width: 100% !important;
+  height: 100% !important;
+  cursor: text;
+}
+
+#terminal .xterm-viewport,
+#terminal .xterm-screen,
+#terminal .xterm-rows,
+#terminal canvas {
+  cursor: text !important;
+}
+
+#terminal .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+#terminal .xterm-screen {
+  width: 100%;
+}
+
+.setup-error--overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  margin: 0;
+  background: #0b0f14;
+  pointer-events: none;
+}
+
+#cursors {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: hidden;
+  /* Never compete with the OS cursor for hit-testing. */
+  cursor: none;
+}
+
+.peer-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transition: none;
+  /* GPU layer without thrashing will-change on every paint. */
+  transform: translateZ(0);
+}
+
+.peer-cursor .arrow {
+  display: block;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
+}
+
+.peer-cursor .label {
+  position: absolute;
+  top: 16px;
+  left: 10px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #0b0f14;
+  background: var(--cursor-color, #7ee787);
+}
+
+.peer-cursor .ring {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.5);
+  box-shadow: 0 0 0 1px var(--cursor-color, #7ee787);
+}
+
+body.alt-reaction {
+  cursor: crosshair;
+}
+
+body.reaction-picking {
+  cursor: default;
+}
+
+/* Reaction bursts (stage-local, over terminal) */
+#reaction-bursts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 25;
+  overflow: hidden;
+}
+
+.reaction-burst {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform, opacity;
+  pointer-events: none;
+  animation: rx-burst 2.2s ease-out forwards;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.reaction-burst__emoji {
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+}
+
+.reaction-burst__name {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #0b0f14;
+  background: var(--rx-color, #7ee787);
+}
+
+@keyframes rx-burst {
+  0% {
+    opacity: 0;
+    transform: translate(var(--tx, 0), var(--ty, 0)) scale(0.4) translateY(8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(var(--tx, 0), var(--ty, 0)) scale(1.15) translateY(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx, 0), var(--ty, 0)) scale(1) translateY(-28px);
+  }
+}
+
+/* Reaction pie — fixed at viewport cursor (editor ReactionPie) */
+.reaction-pie {
+  position: fixed;
+  z-index: 1000;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.reaction-pie:not([hidden]) {
+  pointer-events: auto;
+}
+
+.reaction-pie__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 168px;
+  height: 168px;
+  margin: -84px 0 0 -84px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(15 20 28 / 0.15) 0%,
+    rgb(15 20 28 / 0.72) 55%,
+    rgb(15 20 28 / 0.88) 100%
+  );
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.reaction-pie__items {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+/* Slot holds the radial position; button only scales so hover never jumps. */
+.reaction-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.reaction-wedge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border: none;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  background: rgb(30 40 55 / 0.95);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.4);
+  display: grid;
+  place-items: center;
+  transition: transform 0.12s ease, background 0.12s ease;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.reaction-wedge:hover,
+.reaction-wedge:focus-visible {
+  background: rgb(50 70 95 / 0.98);
+  transform: scale(1.14);
+  outline: none;
+}
+
+.reaction-pie__hint {
+  position: absolute;
+  left: 50%;
+  top: 110px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  color: rgb(230 237 243 / 0.7);
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  #alt-hint {
+    display: none;
+  }
+}

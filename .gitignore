@@ -1,0 +1,23 @@
+context/
+
+# Secrets / local config
+.env
+
+# Rust agent build artifacts
+agent/target/
+
+# Local Delta Chat identity / DB (created in cwd when the agent runs)
+.dc-agent/
+agent/.dc-agent/
+
+# webxdc
+webxdc/node_modules/
+webxdc/dist/
+webxdc/*.xdc
+
+# Embedded into the agent binary at build time (produced by `make build`)
+agent/assets/terminalbuddy.xdc
+
+# Single-file release binary
+dist/
+

@@ -1,0 +1,126 @@
+# Build TerminalBuddy with embedded webxdc and publish Linux binaries to GitHub Releases.
+#
+# Triggers:
+#   - push tag v*          → create/update a GitHub Release with assets
+#   - workflow_dispatch    → build artifacts only (or release if tag-like input set)
+#   - push main            → build + upload workflow artifacts (smoke)
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a draft release (uses VERSION file as tag vX.Y.Z if no tag)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Match chatmail/core CI (edition 2024 / MSRV stack)
+  RUST_VERSION: "1.95.0"
+  CORE_REPO: https://github.com/chatmail/core.git
+  # Pin for reproducible builds; bump when you intentionally update core.
+  CORE_REF: main
+
+jobs:
+  linux-x86_64:
+    name: Build linux-x86_64
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout TerminalBuddy
+        uses: actions/checkout@v4
+        with:
+          path: terminalbuddy
+          fetch-depth: 0
+
+      - name: Checkout chatmail/core (deltachat path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: chatmail/core
+          ref: ${{ env.CORE_REF }}
+          path: terminalbuddy/context/deltachat-core-rust
+          show-progress: false
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libssl-dev zlib1g-dev perl zip curl ca-certificates
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: terminalbuddy/agent -> target
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: terminalbuddy/webxdc/package-lock.json
+
+      - name: Build (webxdc + release binary with embed)
+        working-directory: terminalbuddy
+        run: make build
+
+      - name: Name release asset
+        working-directory: terminalbuddy
+        run: |
+          set -euo pipefail
+          test -x dist/terminalbuddy
+          cp -f dist/terminalbuddy "dist/terminalbuddy-linux-x86_64"
+          ./dist/terminalbuddy --version
+          ls -lah dist/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminalbuddy-linux-x86_64
+          path: terminalbuddy/dist/terminalbuddy-linux-x86_64
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: terminalbuddy/dist/terminalbuddy-linux-x86_64
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## TerminalBuddy `${{ github.ref_name }}`
+
+            Single binary with the mini app **embedded** — no separate `.xdc` needed.
+
+            ### One-line install (Linux x86_64)
+
+            ```bash
+            wget -qO terminalbuddy https://github.com/omidz4t/terminal-buddy-webxdc/releases/latest/download/terminalbuddy-linux-x86_64 && chmod +x terminalbuddy && ./terminalbuddy serve
+            ```
+
+            ```bash
+            ./terminalbuddy --version
+            # whitelist (not YOLO) + join from invite
+            ./terminalbuddy serve \
+              --invite 'https://i.delta.chat/#…' \
+              --allowed-commands ls,cat,pwd,whoami,uname
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: macOS later — keep job commented until runners are desired.
+  # macos-aarch64: ...

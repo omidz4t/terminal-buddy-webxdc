@@ -1,0 +1,24 @@
+[package]
+name = "terminal_buddy"
+version = "0.1.0"
+edition = "2024"
+description = "TerminalBuddy — shared shell over Delta Chat webxdc realtime"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1"
+crossterm = "0.28"
+deltachat = { path = "../context/deltachat-core-rust", default-features = true }
+portable-pty = "0.9"
+ratatui = "0.29"
+rustyline = "15"
+serde_json = "1"
+tokio = { version = "1", features = [
+  "fs",
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "io-util",
+  "sync",
+  "signal",
+] }
