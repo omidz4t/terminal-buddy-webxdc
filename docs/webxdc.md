@@ -92,3 +92,11 @@ printf '\033]52;c;SGVsbG8gZnJvbSBUZXJtaW5hbEJ1ZGR5\007'
 
 A copy card should offer “Hello from TerminalBuddy”. Existing app messages must be
 replaced with a newly built/shared app to receive this client update.
+
+
+If a tool reports **Copied to tmux buffer**, open the app’s ⋮ menu and choose
+**Copy tmux buffer**, then **Copy to clipboard** in the resulting card. This reads
+the tmux server’s latest buffer only on request (up to 16 KiB of UTF-8 text).
+Tmux buffers are shared across sessions on that server; use a dedicated host
+account/server. The reply travels over the shared group channel, although only
+the requesting address displays the card; this is not private clipboard transport.

@@ -87,3 +87,11 @@ Clients also cannot authenticate output or exit frames. All participants must be
 trusted. Only explicitly hosted app instances accept input or resize frames;
 geometry is capped at 500 by 200 and output is batched up to 64 KiB at 50 frames/s.
 Presence joins are periodic and never answered with another join.
+
+
+`C | requester-address-utf8` (1–512 address bytes) explicitly requests the latest
+server tmux buffer from an actively hosted instance. The host responds with JSON
+`{"t":"clipboard_reply","a":"requester","text":"…"}` or an `error` field.
+Only the requesting address displays the copy card. Responses are shared-channel
+data, not private or authenticated. The host bounds reads to 16 KiB and three
+seconds, preserves UTF-8 text and trailing newlines, and never types it into the shell.

@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
  *   statusOk: boolean,
  *   extraKeysEnabled: boolean,
  *   onToggleExtraKeys: () => void,
+ *   onCopyTmuxBuffer: () => void,
  * }} props
  */
 export function Titlebar({
@@ -16,6 +17,7 @@ export function Titlebar({
   statusOk,
   extraKeysEnabled,
   onToggleExtraKeys,
+  onCopyTmuxBuffer,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -117,6 +119,12 @@ export function Titlebar({
         </button>
         {menuOpen ? (
           <div class="titlebar-menu" role="menu">
+            <button type="button" class="titlebar-menu-item" role="menuitem"
+              onClick={() => { setMenuOpen(false); onCopyTmuxBuffer(); }}>
+              <span class="titlebar-menu-check" />
+              Copy tmux buffer
+              <span class="titlebar-menu-sub">Retrieve text copied by terminal tools</span>
+            </button>
             <button
               type="button"
               class="titlebar-menu-item"

@@ -2254,6 +2254,38 @@ fn coalesce_output(frame: &mut Vec<u8>, rx: &mut mpsc::Receiver<Vec<u8>>) -> Opt
     None
 }
 
+async fn read_tmux_buffer() -> Result<String> {
+    read_tmux_buffer_from(tokio::process::Command::new("tmux")).await
+}
+
+async fn read_tmux_buffer_from(mut command: tokio::process::Command) -> Result<String> {
+    use tokio::io::AsyncReadExt;
+    let mut child = command
+        .args(["save-buffer", "-"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?;
+    // Worst-case JSON escaping stays below gossip's 128 KiB frame limit.
+    let mut bytes = Vec::new();
+    child
+        .stdout
+        .take()
+        .context("tmux stdout unavailable")?
+        .take(16 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .await?;
+    if bytes.len() > 16 * 1024 {
+        let _ = child.kill().await;
+        bail!("tmux buffer is larger than 16 KiB; select a smaller section");
+    }
+    if !child.wait().await?.success() {
+        bail!("No tmux buffer available");
+    }
+    String::from_utf8(bytes).context("tmux buffer is not UTF-8 text")
+}
+
 async fn on_realtime(
     ctx: &Context,
     sessions: &Sessions,
@@ -2277,6 +2309,29 @@ async fn on_realtime(
     }
 
     match data[0] {
+        b'C' if data.len() > 1 && data.len() <= 513 => {
+            let Ok(addr) = std::str::from_utf8(&data[1..]) else {
+                return;
+            };
+            // Explicit local menu request; never poll or automatically publish buffers.
+            let result = if state.use_tmux() {
+                tokio::time::timeout(Duration::from_secs(3), read_tmux_buffer())
+                    .await
+                    .map_err(|_| anyhow::anyhow!("tmux clipboard request timed out"))
+                    .and_then(|result| result)
+            } else {
+                Err(anyhow::anyhow!("This host is not using tmux"))
+            };
+            let reply = match result {
+                Ok(text) => serde_json::json!({"t":"clipboard_reply", "a":addr, "text":text}),
+                Err(error) => {
+                    serde_json::json!({"t":"clipboard_reply", "a":addr, "error":error.to_string()})
+                }
+            };
+            if let Ok(bytes) = serde_json::to_vec(&reply) {
+                let _ = send_webxdc_realtime_data(ctx, msg_id, bytes).await;
+            }
+        }
         // Peer wants keystrokes applied to the shared PTY.
         // Frame: I | 0x01 | u16le addr_len | addr utf8 | payload
         // (legacy bare payload: denied unless party mode)
@@ -2492,6 +2547,61 @@ fn bounded_pty_size(cols: u16, rows: u16) -> Option<PtySize> {
 #[cfg(test)]
 mod security_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn reads_tmux_buffer_without_changing_bytes_and_rejects_oversize() {
+        if !which_cmd("tmux") {
+            return;
+        }
+        let socket = format!("terminalbuddy-clipboard-test-{}", std::process::id());
+        struct Cleanup(String);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::process::Command::new("tmux")
+                    .args(["-L", &self.0, "kill-server"])
+                    .output();
+            }
+        }
+        let _cleanup = Cleanup(socket.clone());
+        assert!(
+            std::process::Command::new("tmux")
+                .args([
+                    "-L",
+                    &socket,
+                    "-f",
+                    "/dev/null",
+                    "new-session",
+                    "-d",
+                    "-s",
+                    "clipboard-test"
+                ])
+                .status()
+                .unwrap()
+                .success()
+        );
+        for text in ["Hello 👋\nsecond line\n", &"x".repeat(16 * 1024 + 1)] {
+            let mut loader = std::process::Command::new("tmux")
+                .args(["-L", &socket, "load-buffer", "-"])
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            loader
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(text.as_bytes())
+                .unwrap();
+            assert!(loader.wait().unwrap().success());
+            let mut command = tokio::process::Command::new("tmux");
+            command.args(["-L", &socket]);
+            let result = read_tmux_buffer_from(command).await;
+            if text.len() > 16 * 1024 {
+                assert!(result.unwrap_err().to_string().contains("larger than"));
+            } else {
+                assert_eq!(result.unwrap(), text);
+            }
+        }
+    }
 
     #[test]
     fn batching_preserves_bytes_and_exit_order() {

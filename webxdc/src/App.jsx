@@ -93,6 +93,8 @@ export function App() {
 
   const stageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const termHostRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const requestClipboardRef = useRef(null);
+  const clipboardTimerRef = useRef(null);
   const presenceRef = useRef(/** @type {Presence | null} */ (null));
   /** Inject soft-key sequences into the same path as keyboard input */
   const sendInputRef = useRef(/** @type {null | ((s: string) => void)} */ (null));
@@ -281,6 +283,20 @@ export function App() {
       }
     };
 
+    requestClipboardRef.current = () => {
+      const addr = new TextEncoder().encode(selfAddr);
+      if (addr.length > 512) { setStatusPair("Clipboard address too long", false); return; }
+      const frame = new Uint8Array(1 + addr.length);
+      frame[0] = 0x43; // C: explicit tmux-buffer request
+      frame.set(addr, 1);
+      sendRaw(frame);
+      clearTimeout(clipboardTimerRef.current);
+      clipboardTimerRef.current = setTimeout(() => {
+        setStatusPair("No clipboard reply — check connection and host version", false);
+      }, 6000);
+      setStatusPair("requesting tmux buffer…", false);
+    };
+
     const presence = new Presence(selfAddr, selfName, sendRaw);
     presenceRef.current = presence;
     const offPeers = presence.onChange((list) => schedulePeers(list));
@@ -296,6 +312,17 @@ export function App() {
       if (msg[0] === 0x7b /* '{' */) {
         try {
           const j = JSON.parse(new TextDecoder().decode(msg));
+          if (j?.t === "clipboard_reply") {
+            if (j.a !== selfAddr) return;
+            clearTimeout(clipboardTimerRef.current);
+            if (typeof j.text === "string" && j.text.length <= 16384) {
+              setClipboardRequest({ text: j.text, id: Date.now() });
+              setStatusPair("tmux buffer ready to copy", connectedRef.current);
+            } else {
+              setStatusPair(typeof j.error === "string" ? j.error : "Unable to read tmux buffer", false);
+            }
+            return;
+          }
           if (j?.t === "cmd_wait") {
             setCmdWait({
               id: String(j.i || ""),
@@ -509,6 +536,8 @@ export function App() {
       offPeers();
       offRx();
       presence.destroy();
+      clearTimeout(clipboardTimerRef.current);
+      requestClipboardRef.current = null;
       presenceRef.current = null;
       sendInputRef.current = null;
       termRef.current = null;
@@ -661,6 +690,7 @@ export function App() {
         statusOk={statusOk}
         extraKeysEnabled={extraKeysEnabled}
         onToggleExtraKeys={toggleExtraKeys}
+        onCopyTmuxBuffer={() => requestClipboardRef.current?.()}
       />
       <div id="main">
         <div id="stage" ref={stageRef}>
