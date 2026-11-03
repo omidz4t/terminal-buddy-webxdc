@@ -607,3 +607,32 @@ body.reaction-picking {
     display: none;
   }
 }
+
+
+.clipboard-request {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background: #17212d;
+  border-top: 1px solid #52677c;
+  display: grid;
+  gap: 8px;
+  max-height: 45%;
+  overflow: auto;
+}
+.clipboard-request textarea {
+  width: 100%;
+  min-height: 64px;
+  color: #e6edf3;
+  background: #0b0f14;
+  border: 1px solid #52677c;
+  user-select: text;
+  font: inherit;
+}
+.clipboard-actions { display: flex; gap: 8px; }
+.clipboard-actions button {
+  padding: 8px 12px;
+  color: #e6edf3;
+  background: #26384c;
+  border: 1px solid #52677c;
+  border-radius: 5px;
+}

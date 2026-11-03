@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { installClipboardHandler } from "./clipboard.js";
+import { ClipboardRequest } from "./components/ClipboardRequest.jsx";
 import { Presence, pickUserColor } from "./presence.js";
 import { useWebxdc } from "./hooks/useWebxdc.js";
 import { useVisualViewport } from "./hooks/useVisualViewport.js";
@@ -65,6 +67,7 @@ export function App() {
   // Lift/resize UI above the soft keyboard (phone).
   useVisualViewport();
   const { webxdc, error, ready } = useWebxdc();
+  const [clipboardRequest, setClipboardRequest] = useState(null);
   const [status, setStatus] = useState("loading…");
   const [statusOk, setStatusOk] = useState(false);
   const [peers, setPeers] = useState(/** @type {any[]} */ ([]));
@@ -256,6 +259,9 @@ export function App() {
       scrollback: 10000,
       allowProposedApi: true,
       macOptionIsMeta: false,
+    });
+    const clipboardHandler = installClipboardHandler(term, (text) => {
+      setClipboardRequest({ text, id: Date.now() });
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -511,6 +517,7 @@ export function App() {
       } catch {
         /* ignore */
       }
+      clipboardHandler.dispose();
       term.dispose();
     };
   }, [webxdc, pushBurst, schedulePeers, setStatusPair]);
@@ -683,6 +690,10 @@ export function App() {
           <ReactionBursts bursts={bursts} />
         </div>
       </div>
+      {clipboardRequest ? (
+        <ClipboardRequest key={clipboardRequest.id} text={clipboardRequest.text}
+          onClose={() => { setClipboardRequest(null); termRef.current?.focus(); }} />
+      ) : null}
       <MobileExtraKeys
         visible={extraKeysEnabled}
         onSend={injectKeys}

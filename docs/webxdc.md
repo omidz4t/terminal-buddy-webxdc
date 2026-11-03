@@ -73,3 +73,22 @@ Shows connection state: waiting for host → P2P connected → errors.
 
 - [Architecture](./architecture.md)  
 - [Protocol](./protocol.md)  
+
+
+### Copying from terminal tools
+
+Tools that emit OSC 52 clipboard requests now show a **Terminal requested a copy**
+card. Review the text and tap **Copy to clipboard** on your device. If the webview
+blocks clipboard APIs, the text remains selectable for your device’s Copy action.
+Requests never read your clipboard and never silently overwrite other viewers’
+clipboards. The tmux host forwards these requests too. Tools that only run remote
+`xclip`, `wl-copy`, or `pbcopy` must be configured to emit OSC 52 instead.
+
+To check the path from the shell:
+
+```sh
+printf '\033]52;c;SGVsbG8gZnJvbSBUZXJtaW5hbEJ1ZGR5\007'
+```
+
+A copy card should offer “Hello from TerminalBuddy”. Existing app messages must be
+replaced with a newly built/shared app to receive this client update.

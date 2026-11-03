@@ -2629,6 +2629,24 @@ fn resolve_pty_command(
         args.push("80".into());
         args.push("-y".into());
         args.push("30".into());
+        // Forward application OSC 52 requests through tmux, including release
+        // binaries where the source-tree tmux.conf is unavailable.
+        args.extend(
+            [
+                ";",
+                "set-option",
+                "-s",
+                "set-clipboard",
+                "on",
+                ";",
+                "set-option",
+                "-as",
+                "terminal-features",
+                ",xterm*:clipboard",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        );
         return Ok(("tmux".into(), args));
     }
 
