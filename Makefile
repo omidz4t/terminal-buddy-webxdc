@@ -36,7 +36,7 @@ help:
 
 build-webxdc:
 	@echo "==> building webxdc"
-	cd $(WEBXDC) && npm install
+	cd $(WEBXDC) && npm ci
 	cd $(WEBXDC) && npm run build
 	@test -f $(XDC_OUT) || (echo "missing $(XDC_OUT)" && exit 1)
 	@ls -la $(XDC_OUT)
@@ -50,7 +50,7 @@ embed-xdc: build-webxdc
 # One release binary with webxdc inside — no separate .xdc required at runtime.
 build: embed-xdc
 	@echo "==> building release agent (embeds webxdc)"
-	cd $(AGENT) && cargo build --release
+	cd $(AGENT) && cargo build --release --locked
 	@mkdir -p $(DIST)
 	cp -f $(AGENT)/target/release/terminal_buddy $(DIST)/$(BIN_NAME)
 	@chmod +x $(DIST)/$(BIN_NAME)
@@ -87,7 +87,7 @@ run-agent-inv: embed-xdc
 	  echo "    server=$$DC_AGENT_SERVER"; \
 	  echo "    force_join=$$DC_FORCE_JOIN"; \
 	  if [ -n "$${DC_INVITE:-}" ]; then \
-	    echo "    invite=$${DC_INVITE:0:56}…"; \
+	    echo "    invite=(configured)"; \
 	  else \
 	    echo "    invite=(MISSING — set DC_INVITE in .env)"; \
 	    exit 1; \

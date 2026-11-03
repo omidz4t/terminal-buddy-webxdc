@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1"
+tempfile = "3"
 crossterm = "0.28"
 deltachat = { path = "../context/deltachat-core-rust", default-features = true }
 portable-pty = "0.9"

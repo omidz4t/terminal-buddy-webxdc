@@ -38,7 +38,7 @@ serve [app.xdc] [--invite URL] [--force-join] [--allowed-commands a,b,c] [--tmux
 |------------|---------|---------|
 | path to `.xdc` | **embedded** (or `DC_XDC`) | Package to send / host |
 | `--invite` | — | SecureJoin + send mini app |
-| `--force-join` / `--no-force-join` | force on by default when bootstrapping | Re-join vs reuse group |
+| `--force-join` / `--no-force-join` | force on by default when bootstrapping | Re-join vs reuse the accepted group matching the supplied invite |
 | `--allowed-commands` / `DC_ALLOWED_COMMANDS` | empty (**YOLO**) | Whitelist restricted shell |
 | `--tmux` / `DC_USE_TMUX=1` | **off** | YOLO tmux session |
 | `--no-tmux` | — | Force plain shell |

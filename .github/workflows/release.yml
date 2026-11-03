@@ -24,7 +24,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_VERSION: "1.95.0"
-  CORE_REF: main
+  CORE_REF: 823b0741df82e3ec0f61285d52bf91ae19b1963e
   REGISTRY: ghcr.io
 
 jobs:
@@ -34,13 +34,13 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout TerminalBuddy
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: terminalbuddy
           fetch-depth: 0
 
       - name: Checkout chatmail/core (deltachat path dep)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: chatmail/core
           ref: ${{ env.CORE_REF }}
@@ -55,18 +55,18 @@ jobs:
             libssl-dev zlib1g-dev perl zip curl ca-certificates
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ env.RUST_VERSION }}
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: terminalbuddy/agent -> target
           cache-on-failure: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -131,7 +131,7 @@ jobs:
           echo "Image: ${IMAGE_BASE}:${VERSION}"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: terminalbuddy-linux-x86_64
           path: terminalbuddy/dist/terminalbuddy-linux-x86_64
@@ -140,7 +140,7 @@ jobs:
       # Always publish a versioned GitHub Release (main, tags, workflow_dispatch).
       # Previously this was skipped on main because of: if: startsWith(github.ref, 'refs/tags/v')
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.ver.outputs.tag_name }}
           name: TerminalBuddy ${{ steps.ver.outputs.tag_name }}
@@ -183,10 +183,10 @@ jobs:
 
       # ── Docker: package the already-built binary (no second Rust build) ──
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -208,7 +208,7 @@ jobs:
           echo "${TAGS}"
 
       - name: Build & push image (COPY dist binary only — no cargo)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: terminalbuddy
           file: terminalbuddy/Dockerfile

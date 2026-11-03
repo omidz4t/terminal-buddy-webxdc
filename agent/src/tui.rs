@@ -103,6 +103,9 @@ async fn run_loop(
     app: &mut App,
 ) -> Result<()> {
     loop {
+        if app.state.is_shutdown() {
+            break;
+        }
         let snap = app.state.snapshot();
         if !snap.chat_members.is_empty() {
             app.access_sel = app.access_sel.min(snap.chat_members.len() - 1);

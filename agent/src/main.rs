@@ -30,14 +30,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
-use deltachat::chat::{self, ChatId, ChatItem};
+use deltachat::chat::{self, ChatId};
 use deltachat::chatlist::Chatlist;
 use deltachat::config::Config;
 use deltachat::contact::{Contact, ContactId};
 use deltachat::context::{Context, ContextBuilder};
 use deltachat::message::{Message, MessageState, MsgId, Viewtype};
 use deltachat::peer_channels::{
-    send_webxdc_realtime_advertisement, send_webxdc_realtime_data,
+    leave_webxdc_realtime, send_webxdc_realtime_advertisement, send_webxdc_realtime_data,
 };
 use deltachat::securejoin;
 use deltachat::stock_str::StockStrings;
@@ -386,7 +386,10 @@ impl SharedState {
             s.allowed_commands = allowed;
         });
         self.sync_allow_file();
-        self.log(format!("shell policy → {} (restarting PTY…)", policy.label()));
+        self.log(format!(
+            "shell policy → {} (restarting PTY…)",
+            policy.label()
+        ));
         self.restart_pty.store(true, Ordering::SeqCst);
     }
 
@@ -559,7 +562,9 @@ impl SharedState {
     pub fn submit_invite(&self, url: String) {
         let url = normalize_invite(&url);
         if url.is_empty()
-            || !(url.contains("delta.chat") || url.contains("OPENPGP4FPR") || url.contains("openpgp4fpr"))
+            || !(url.contains("delta.chat")
+                || url.contains("OPENPGP4FPR")
+                || url.contains("openpgp4fpr"))
         {
             self.patch(|s| {
                 s.invite_hint =
@@ -573,10 +578,7 @@ impl SharedState {
         }
         self.set_invite_url(url.clone());
         *self.pending_share.lock().unwrap() = Some(PendingShare::Invite(url.clone()));
-        self.log(format!(
-            "share: invite queued {}",
-            url.chars().take(56).collect::<String>()
-        ));
+        self.log("share: invite queued");
         self.set_status("joining invite…");
     }
 
@@ -653,12 +655,7 @@ impl SharedState {
         }
         let key = addr.to_lowercase();
         // Host always has access — no need to toggle.
-        let host = self
-            .snap
-            .lock()
-            .unwrap()
-            .identity
-            .to_lowercase();
+        let host = self.snap.lock().unwrap().identity.to_lowercase();
         if !host.is_empty() && key == host {
             self.log("access: host always has write access");
             return;
@@ -787,8 +784,7 @@ impl SharedState {
         if writing {
             e.writing = true;
             e.writing_at = Some(std::time::Instant::now());
-            self.snap.lock().unwrap().last_writer =
-                format!("{} <{}>", e.name, e.addr);
+            self.snap.lock().unwrap().last_writer = format!("{} <{}>", e.name, e.addr);
         }
     }
 
@@ -903,7 +899,8 @@ fn bin_name() -> String {
 }
 
 fn wants_help(args: &[String]) -> bool {
-    args.iter().any(|a| matches!(a.as_str(), "-h" | "--help" | "help"))
+    args.iter()
+        .any(|a| matches!(a.as_str(), "-h" | "--help" | "help"))
 }
 
 fn wants_version(args: &[String]) -> bool {
@@ -948,17 +945,14 @@ fn resolve_xdc_path(cli: Option<&str>) -> Result<PathBuf> {
     }
 
     if !EMBEDDED_XDC.is_empty() {
-        let dir = std::env::temp_dir().join("terminalbuddy-embed");
-        std::fs::create_dir_all(&dir).context("create temp dir for embedded xdc")?;
-        let path = dir.join(format!("terminalbuddy-{APP_VERSION}.xdc"));
-        // Rewrite when size changes (new embed after rebuild).
-        let need_write = match std::fs::metadata(&path) {
-            Ok(m) => m.len() as usize != EMBEDDED_XDC.len(),
-            Err(_) => true,
-        };
-        if need_write {
-            std::fs::write(&path, EMBEDDED_XDC).context("write embedded webxdc to temp")?;
-        }
+        // A private random directory prevents pre-created files and symlink attacks.
+        let dir = tempfile::Builder::new()
+            .prefix("terminalbuddy-")
+            .tempdir()?;
+        let path = dir.path().join("terminalbuddy.xdc");
+        std::fs::write(&path, EMBEDDED_XDC).context("write embedded webxdc")?;
+        // Keep the extracted package for the process lifetime.
+        let _ = dir.keep();
         return Ok(path);
     }
 
@@ -969,9 +963,9 @@ fn resolve_xdc_path(cli: Option<&str>) -> Result<PathBuf> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../webxdc/terminalbuddy.xdc"),
     ] {
         if cand.is_file() {
-            return cand.canonicalize().with_context(|| {
-                format!("webxdc present but unreadable: {}", cand.display())
-            });
+            return cand
+                .canonicalize()
+                .with_context(|| format!("webxdc present but unreadable: {}", cand.display()));
         }
     }
 
@@ -1007,7 +1001,7 @@ COMMANDS:
 SERVE OPTIONS:
   --invite URL                Join this SecureJoin invite and send the mini app
   --force-join                Re-join even if a group already exists (default with --invite)
-  --no-force-join             Reuse an existing group instead of re-joining
+  --no-force-join             Resolve supplied invite (never picks an arbitrary group)
   --allowed-commands a,b,c    Whitelist mode (restricted shell — not YOLO)
   --allowed a,b,c             Alias for --allowed-commands
   --tmux                      YOLO + tmux (ignored when whitelist is set)
@@ -1184,6 +1178,11 @@ Send a file once into a chat (debug helper)."
 async fn open_ctx() -> Result<(Context, EventEmitter, PathBuf)> {
     let dir = std::env::current_dir()?.join(DATA_DIR);
     tokio::fs::create_dir_all(&dir).await?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+    }
     let events = Events::new();
     let emitter = events.get_emitter();
     let ctx = ContextBuilder::new(dir.join(DB_NAME))
@@ -1289,7 +1288,9 @@ async fn cmd_join(invite: Option<String>) -> Result<()> {
     wait_securejoin(&emitter, Duration::from_secs(120)).await;
     chat::send_text_msg(&ctx, chat_id, "Hi".into()).await?;
     wait_smtp_any(&emitter, Duration::from_secs(60)).await;
-    say_ok(&format!("Joined chat. Run `make run-agent` to host the terminal."));
+    say_ok(&format!(
+        "Joined chat. Run `make run-agent` to host the terminal."
+    ));
     ctx.stop_io().await;
     Ok(())
 }
@@ -1300,7 +1301,9 @@ async fn cmd_send_file(path: PathBuf, chat: Option<String>) -> Result<()> {
     ensure_account(&ctx, true).await?;
     let chat_id = match chat {
         Some(s) => ChatId::new(s.parse()?),
-        None => first_chat(&ctx).await?.context("No chat yet — join an invite first")?,
+        None => first_chat(&ctx)
+            .await?
+            .context("No chat yet — join an invite first")?,
     };
     let id = send_xdc(&ctx, chat_id, &path).await?;
     wait_smtp_large(&emitter, Duration::from_secs(120)).await;
@@ -1446,7 +1449,6 @@ fn parse_serve_args(args: &[String]) -> ServeOpts {
     }
 }
 
-
 fn normalize_invite(s: &str) -> String {
     s.trim()
         .trim_matches(|c| c == '\'' || c == '"' || c == '`' || c == ' ')
@@ -1498,10 +1500,7 @@ async fn apply_invite_and_send(
     invite: String,
 ) {
     let invite = normalize_invite(&invite);
-    state.log(format!(
-        "share: joining {}…",
-        invite.chars().take(48).collect::<String>()
-    ));
+    state.log("share: joining invite…");
     ctx.maybe_network().await;
 
     let chat_id = match securejoin::join_securejoin(ctx, &invite).await {
@@ -1561,6 +1560,8 @@ async fn send_xdc_to_chat(
         state.log(format!("share: delivery wait: {e:#} (still hosting)"));
     }
 
+    // Sending a replacement retires every previous app instance.
+    retire_hosts(ctx, sessions, outs, state).await;
     if let Err(e) = ensure_host(ctx, sessions.clone(), outs.clone(), state.clone(), msg_id).await {
         state.finish_invite_job(false, format!("host PTY failed: {e:#}"));
         return;
@@ -1583,7 +1584,7 @@ async fn load_share_targets(ctx: &Context) -> Result<Vec<ShareTarget>> {
             continue;
         }
         let ch = chat::Chat::load_from_db(ctx, id).await?;
-        if ch.is_self_talk() || ch.is_device_talk() {
+        if ch.is_self_talk() || ch.is_device_talk() || ch.is_contact_request() {
             continue;
         }
         let name = ch.get_name().to_string();
@@ -1869,23 +1870,7 @@ async fn cmd_serve(
     let host_chat: Arc<Mutex<Option<ChatId>>> = Arc::new(Mutex::new(boot_chat));
 
     if let Some(msg_id) = boot_msg {
-        ensure_host(
-            &ctx,
-            sessions.clone(),
-            outs.clone(),
-            state.clone(),
-            msg_id,
-        )
-        .await?;
-        if let Some(chat_id) = boot_chat {
-            for old in own_webxdc_msgs(&ctx, chat_id).await? {
-                if old != msg_id {
-                    state.log(format!("also host older webxdc {old}"));
-                    let _ =
-                        ensure_host(&ctx, sessions.clone(), outs.clone(), state.clone(), old).await;
-                }
-            }
-        }
+        ensure_host(&ctx, sessions.clone(), outs.clone(), state.clone(), msg_id).await?;
         state.patch(|s| s.hosting = sessions.lock().unwrap().len());
         if no_tui {
             state.log(String::from("headless ready — open newest webxdc on phone"));
@@ -1894,7 +1879,9 @@ async fn cmd_serve(
         }
         state.set_status("waiting for peer on realtime P2P");
     } else if no_tui {
-        state.log(String::from("headless ready — no webxdc sent (use --invite)"));
+        state.log(String::from(
+            "headless ready — no webxdc sent (use --invite)",
+        ));
         state.set_status("ready — waiting (no share UI)");
     } else {
         state.log(String::from("TUI ready — Share tab to send the mini app"));
@@ -1958,6 +1945,8 @@ async fn cmd_serve(
     let ctx_m = ctx.clone();
     let state_m = state.clone();
     let host_chat_m = host_chat.clone();
+    let sessions_m = sessions.clone();
+    let outs_m = outs.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(15)).await;
@@ -1968,7 +1957,30 @@ async fn cmd_serve(
             let chat_n = *host_chat_m.lock().unwrap();
             if let Some(chat_n) = chat_n {
                 if let Ok(members) = load_chat_access_list(&ctx_m, chat_n).await {
+                    let previous = state_m.snapshot().chat_members;
+                    let still_member = match chat::Chat::load_from_db(&ctx_m, chat_n).await {
+                        Ok(ch) => ch.is_self_in_chat(&ctx_m).await.unwrap_or(false),
+                        Err(_) => false,
+                    };
+                    if !still_member
+                        || previous
+                            .iter()
+                            .any(|old| !members.iter().any(|new| new.addr == old.addr))
+                    {
+                        // Old topic secrets cannot be revoked. Stop serving them immediately.
+                        retire_hosts(&ctx_m, &sessions_m, &outs_m, &state_m).await;
+                        state_m.log(
+                            "Membership removed: retired app; restart/share a fresh app to resume",
+                        );
+                        state_m.request_shutdown();
+                        break;
+                    }
                     state_m.patch(|s| s.chat_members = members);
+                    // Keep gossip subscriptions warm even after clients stop startup pings.
+                    let ids: Vec<u32> = sessions_m.lock().unwrap().keys().copied().collect();
+                    for id in ids {
+                        let _ = send_webxdc_realtime_advertisement(&ctx_m, MsgId::new(id)).await;
+                    }
                 }
             }
             if let Ok(targets) = load_share_targets(&ctx_m).await {
@@ -1980,7 +1992,6 @@ async fn cmd_serve(
     // Event loop → updates SharedState
     let state_ev = state.clone();
     let sessions_ev = sessions.clone();
-    let outs_ev = outs.clone();
     let ctx_ev = ctx.clone();
     let host_chat_ev = host_chat.clone();
     tokio::spawn(async move {
@@ -2015,29 +2026,14 @@ async fn cmd_serve(
                             kind as char
                         ));
                     }
-                    on_realtime(
-                        &ctx_ev,
-                        &sessions_ev,
-                        &outs_ev,
-                        &state_ev,
-                        mid,
-                        &data,
-                    )
-                    .await;
+                    on_realtime(&ctx_ev, &sessions_ev, &state_ev, mid, &data).await;
                 }
                 EventType::WebxdcRealtimeAdvertisementReceived { msg_id: mid } => {
                     state_ev.peers_seen.fetch_add(1, Ordering::Relaxed);
                     state_ev.log(format!("← peer advertisement {mid}"));
                     state_ev.set_status("peer on P2P");
-                    if let Err(e) =
-                        ensure_host(&ctx_ev, sessions_ev.clone(), outs_ev.clone(), state_ev.clone(), mid)
-                            .await
-                    {
-                        state_ev.log(format!("ensure_host err: {e:#}"));
-                    } else {
+                    if sessions_ev.lock().unwrap().contains_key(&mid.to_u32()) {
                         let _ = send_webxdc_realtime_advertisement(&ctx_ev, mid).await;
-                        // Status is for host TUI / client header only — never inject into PTY stream.
-                        write_pty(&sessions_ev, mid, b"\n");
                     }
                     state_ev.patch(|s| s.hosting = sessions_ev.lock().unwrap().len());
                 }
@@ -2057,7 +2053,9 @@ async fn cmd_serve(
                 }
                 EventType::Info(m) if m.contains("IROH_REALTIME") => {
                     // keep log quieter: only join/advertise
-                    if m.contains("Joining") || m.contains("Sent realtime") || m.contains("Received")
+                    if m.contains("Joining")
+                        || m.contains("Sent realtime")
+                        || m.contains("Received")
                     {
                         // Received is very noisy when typing — skip bulk
                         if !m.contains("Received realtime data") {
@@ -2175,12 +2173,29 @@ async fn ensure_host(
     state.register_hosted(id);
 
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(64);
-    outs.lock().unwrap().insert(id, RealtimeOut { tx: tx.clone() });
+    outs.lock()
+        .unwrap()
+        .insert(id, RealtimeOut { tx: tx.clone() });
 
     let ctx_send = ctx.clone();
     let state_out = state.clone();
     tokio::spawn(async move {
-        while let Some(frame) = rx.recv().await {
+        let mut pending = None;
+        let mut pace = tokio::time::interval(Duration::from_millis(20));
+        pace.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            let Some(mut frame) = (match pending.take() {
+                Some(frame) => Some(frame),
+                None => rx.recv().await,
+            }) else {
+                break;
+            };
+            // Bound broadcasts to 50/s and coalesce output below gossip's 128 KiB limit.
+            pace.tick().await;
+            pending = coalesce_output(&mut frame, &mut rx);
+            if !state_out.hosted_ids().contains(&id) {
+                break;
+            }
             let n = frame.len() as u64;
             if let Err(e) = send_webxdc_realtime_data(&ctx_send, msg_id, frame).await {
                 state_out.log(format!("realtime send failed: {e:#}"));
@@ -2223,10 +2238,25 @@ async fn ensure_host(
     Ok(())
 }
 
+// Never merge terminal output across an exit or a JSON control frame.
+fn coalesce_output(frame: &mut Vec<u8>, rx: &mut mpsc::Receiver<Vec<u8>>) -> Option<Vec<u8>> {
+    if frame.first() == Some(&KIND_OUTPUT) {
+        while frame.len() + 4096 <= 64 * 1024 {
+            match rx.try_recv() {
+                Ok(next) if next.first() == Some(&KIND_OUTPUT) => {
+                    frame.extend_from_slice(&next[1..]);
+                }
+                Ok(next) => return Some(next),
+                Err(_) => break,
+            }
+        }
+    }
+    None
+}
+
 async fn on_realtime(
     ctx: &Context,
     sessions: &Sessions,
-    outs: &Outs,
     state: &Arc<SharedState>,
     msg_id: MsgId,
     data: &[u8],
@@ -2234,13 +2264,9 @@ async fn on_realtime(
     if data.is_empty() {
         return;
     }
+    // Only locally selected apps may access a shell. Remote frames never spawn one.
     if !sessions.lock().unwrap().contains_key(&msg_id.to_u32()) {
-        if let Err(e) =
-            ensure_host(ctx, sessions.clone(), outs.clone(), state.clone(), msg_id).await
-        {
-            state.log(format!("lazy host: {e:#}"));
-            return;
-        }
+        return;
     }
 
     // Presence JSON — peers propagate this among themselves. Host only
@@ -2442,18 +2468,70 @@ fn parse_input_frame(rest: &[u8]) -> (String, &[u8]) {
 }
 
 fn resize_pty(sessions: &Sessions, msg_id: MsgId, cols: u16, rows: u16) {
-    if cols == 0 || rows == 0 {
+    let Some(size) = bounded_pty_size(cols, rows) else {
         return;
-    }
+    };
     let Some(s) = sessions.lock().unwrap().get(&msg_id.to_u32()).cloned() else {
         return;
     };
-    let _ = s.master.lock().unwrap().resize(PtySize {
-        rows,
-        cols,
+    let _ = s.master.lock().unwrap().resize(size);
+}
+
+fn bounded_pty_size(cols: u16, rows: u16) -> Option<PtySize> {
+    if cols == 0 || rows == 0 {
+        return None;
+    }
+    Some(PtySize {
+        rows: rows.min(200),
+        cols: cols.min(500),
         pixel_width: 0,
         pixel_height: 0,
-    });
+    })
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn batching_preserves_bytes_and_exit_order() {
+        let (tx, mut rx) = mpsc::channel(64);
+        tx.try_send(b"Obc".to_vec()).unwrap();
+        tx.try_send(vec![KIND_EXIT]).unwrap();
+        tx.try_send(b"Od".to_vec()).unwrap();
+        let mut frame = b"Oa".to_vec();
+        assert_eq!(coalesce_output(&mut frame, &mut rx), Some(vec![KIND_EXIT]));
+        assert_eq!(frame, b"Oabc");
+        assert_eq!(rx.try_recv().unwrap(), b"Od");
+    }
+
+    #[test]
+    fn batching_leaves_backpressure_below_gossip_limit() {
+        let (tx, mut rx) = mpsc::channel(64);
+        for _ in 0..32 {
+            let mut frame = vec![KIND_OUTPUT];
+            frame.extend_from_slice(&[b'x'; 4096]);
+            tx.try_send(frame).unwrap();
+        }
+        let mut frame = vec![KIND_OUTPUT];
+        frame.extend_from_slice(&[b'x'; 4096]);
+        assert!(coalesce_output(&mut frame, &mut rx).is_none());
+        assert!(frame.len() <= 64 * 1024);
+        assert!(rx.try_recv().is_ok());
+        assert!(frame[1..].iter().all(|byte| *byte == b'x'));
+    }
+
+    #[test]
+    fn remote_resize_cannot_request_unbounded_grids() {
+        for (cols, rows) in [(10000, 10000), (u16::MAX, u16::MAX), (501, 201)] {
+            let size = bounded_pty_size(cols, rows).unwrap();
+            assert_eq!((size.cols, size.rows), (500, 200));
+        }
+        let size = bounded_pty_size(80, 30).unwrap();
+        assert_eq!((size.cols, size.rows), (80, 30));
+        assert!(bounded_pty_size(0, 30).is_none());
+        assert!(bounded_pty_size(80, 0).is_none());
+    }
 }
 
 fn spawn_pty(
@@ -2537,8 +2615,7 @@ fn resolve_pty_command(
 
     if use_tmux && which_cmd("tmux") {
         let conf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tmux.conf");
-        let session =
-            std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
+        let session = std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
         let mut args = Vec::new();
         if conf.is_file() {
             args.push("-f".into());
@@ -2577,6 +2654,17 @@ async fn broadcast_json(outs: &Outs, v: &serde_json::Value) {
     }
 }
 
+async fn retire_hosts(ctx: &Context, sessions: &Sessions, outs: &Outs, state: &SharedState) {
+    let ids = state.hosted_ids();
+    state.hosted_msgs.lock().unwrap().clear();
+    stop_all_ptys(sessions, outs, state.use_tmux());
+    for id in ids {
+        if let Err(e) = leave_webxdc_realtime(ctx, MsgId::new(id)).await {
+            state.log(format!("leave retired app {id}: {e:#}"));
+        }
+    }
+}
+
 fn stop_all_ptys(sessions: &Sessions, outs: &Outs, was_tmux: bool) {
     let mut map = sessions.lock().unwrap();
     for (_id, sess) in map.drain() {
@@ -2587,8 +2675,7 @@ fn stop_all_ptys(sessions: &Sessions, outs: &Outs, was_tmux: bool) {
     outs.lock().unwrap().clear();
     // If we had been using tmux, kill the named session so nothing is left on the system.
     if was_tmux && which_cmd("tmux") {
-        let session =
-            std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
+        let session = std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
         let _ = std::process::Command::new("tmux")
             .args(["kill-session", "-t", &session])
             .status();
@@ -2616,8 +2703,7 @@ async fn restart_all_ptys(
     }
     outs.lock().unwrap().clear();
     if kill_tmux_session {
-        let session =
-            std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
+        let session = std::env::var("DC_TMUX_SESSION").unwrap_or_else(|_| "terminalbuddy".into());
         let _ = std::process::Command::new("tmux")
             .args(["kill-session", "-t", &session])
             .status();
@@ -2626,8 +2712,7 @@ async fn restart_all_ptys(
     tokio::time::sleep(Duration::from_millis(200)).await;
     for id in ids {
         let mid = MsgId::new(id);
-        if let Err(e) = ensure_host(ctx, sessions.clone(), outs.clone(), state.clone(), mid).await
-        {
+        if let Err(e) = ensure_host(ctx, sessions.clone(), outs.clone(), state.clone(), mid).await {
             state.log(format!("restart host {mid} failed: {e:#}"));
         }
     }
@@ -2638,8 +2723,6 @@ async fn restart_all_ptys(
         shell_label_for(state.use_tmux(), state.shell_policy(), &allowed)
     ));
 }
-
-
 
 fn which_cmd(name: &str) -> bool {
     std::env::var_os("PATH")
@@ -2705,9 +2788,7 @@ async fn wait_msg_sent(ctx: &Context, msg_id: MsgId, timeout: Duration) -> Resul
             _ => {}
         }
         if tokio::time::Instant::now() >= end {
-            bail!(
-                "timeout after {timeout:?} waiting for msg {msg_id} (last state={last_state})"
-            );
+            bail!("timeout after {timeout:?} waiting for msg {msg_id} (last state={last_state})");
         }
         ticks += 1;
         // Keep SMTP worker busy; every few seconds re-nudge the network.
@@ -2747,12 +2828,31 @@ async fn resolve_host_chat(
         "bootstrap requires --invite URL or DC_INVITE (quote the URL — # is a shell comment)",
     )?;
 
-    let need_join = force_join || !has_group_chat(ctx).await?;
-    if need_join {
-        say(&format!(
-            "Invite: {}…",
-            invite.chars().take(48).collect::<String>()
-        ));
+    // Reuse only an accepted group whose ID matches the supplied invite.
+    if !force_join {
+        if let deltachat::qr::Qr::AskVerifyGroup { grpid, .. } =
+            deltachat::qr::check_qr(ctx, &invite).await?
+        {
+            let list = Chatlist::try_load(ctx, 0, None, None).await?;
+            for i in 0..list.len() {
+                let id = list.get_chat_id(i)?;
+                if id.is_special() {
+                    continue;
+                }
+                let ch = chat::Chat::load_from_db(ctx, id).await?;
+                if ch.grpid == grpid
+                    && ch.get_type() == deltachat::constants::Chattype::Group
+                    && ch.blocked == deltachat::constants::Blocked::Not
+                    && ch.is_self_in_chat(ctx).await?
+                {
+                    say_ok(&format!("Reusing invite target ({id})"));
+                    return Ok(id);
+                }
+            }
+        }
+    }
+    {
+        say("Resolving SecureJoin target…");
         let chat_id = securejoin::join_securejoin(ctx, &invite)
             .await
             .context("SecureJoin failed — check the invite URL is complete and quoted")?;
@@ -2768,29 +2868,6 @@ async fn resolve_host_chat(
         say_ok(&format!("Joined target chat ({chat_id})"));
         return Ok(chat_id);
     }
-
-    say("Invite present; already in a group — reusing first group (pass --force-join to rejoin)");
-    first_chat(ctx)
-        .await?
-        .context("No group chat yet — pass --force-join to join from invite")
-}
-
-async fn has_group_chat(ctx: &Context) -> Result<bool> {
-    let list = Chatlist::try_load(ctx, 0, None, None).await?;
-    for i in 0..list.len() {
-        let id = list.get_chat_id(i)?;
-        if id.is_special() {
-            continue;
-        }
-        let ch = chat::Chat::load_from_db(ctx, id).await?;
-        if ch.is_self_talk() || ch.is_device_talk() {
-            continue;
-        }
-        if ch.get_type() == deltachat::constants::Chattype::Group {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 async fn first_chat(ctx: &Context) -> Result<Option<ChatId>> {
@@ -2803,7 +2880,7 @@ async fn first_chat(ctx: &Context) -> Result<Option<ChatId>> {
             continue;
         }
         let ch = chat::Chat::load_from_db(ctx, id).await?;
-        if ch.is_self_talk() || ch.is_device_talk() {
+        if ch.is_self_talk() || ch.is_device_talk() || ch.is_contact_request() {
             continue;
         }
         if ch.get_type() == deltachat::constants::Chattype::Group {
@@ -2814,21 +2891,6 @@ async fn first_chat(ctx: &Context) -> Result<Option<ChatId>> {
         }
     }
     Ok(fallback)
-}
-
-async fn own_webxdc_msgs(ctx: &Context, chat_id: ChatId) -> Result<Vec<MsgId>> {
-    let items = chat::get_chat_msgs(ctx, chat_id).await?;
-    let mut out = Vec::new();
-    for item in items {
-        let ChatItem::Message { msg_id } = item else {
-            continue;
-        };
-        let msg = Message::load_from_db(ctx, msg_id).await?;
-        if msg.get_viewtype() == Viewtype::Webxdc && msg.get_from_id() == ContactId::SELF {
-            out.push(msg_id);
-        }
-    }
-    Ok(out)
 }
 
 fn normalize_server(s: &str) -> String {

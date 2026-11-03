@@ -41,7 +41,7 @@ terminalbuddy --version
   Example: `--invite 'https://i.delta.chat/#FINGERPRINT&v=3&…'`
 - **`--invite=URL`** — Same as `--invite URL` (equals form).
 - **`--force-join`** — Force SecureJoin even if a group chat already exists (default behaviour when bootstrapping unless you pass `--no-force-join`).
-- **`--no-force-join`** — Do not re-join; reuse the first existing group if one is present.
+- **`--no-force-join`** — Reuse only an accepted group matching the supplied invite, otherwise SecureJoin that invite.
 
 Omit **`--invite`** (and do not set bootstrap env) to open the TUI only and send later from **tab 4 Share**.
 

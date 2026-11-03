@@ -41,7 +41,7 @@ export function PeerCursors({ peers }) {
           <div class="ring" hidden></div>
           <svg class="arrow" width="12" height="15" viewBox="0 0 12 15" fill="none">
             <path d="M0 0 L0 14 L4 9 L11 8 Z" fill="#fff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
-            <path class="arrow-fill" d="M0 0 L0 14 L4 9 L11 8 Z" fill="${color}" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+            <path class="arrow-fill" d="M0 0 L0 14 L4 9 L11 8 Z" fill="#7ee787" stroke="#7ee787" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
           <span class="label"></span>`;
         root.appendChild(el);

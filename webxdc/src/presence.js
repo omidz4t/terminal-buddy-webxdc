@@ -60,9 +60,11 @@ export class Presence {
     this.pointerTimer = setInterval(() => this.flushPointer(), POINTER_SEND_MS);
     this.staleTimer = setInterval(() => this.gc(), 1000);
     this.announceJoin();
+    this.joinTimer = setInterval(() => this.announceJoin(), 5000);
   }
 
   destroy() {
+    clearInterval(this.joinTimer);
     clearInterval(this.pointerTimer);
     clearInterval(this.staleTimer);
     this.sendJson({
@@ -106,6 +108,9 @@ export class Presence {
   }
 
   announceJoin() {
+    const now = Date.now();
+    if (this.lastJoinAt !== undefined && now - this.lastJoinAt < 1000) return;
+    this.lastJoinAt = now;
     this.sendJson({
       t: "join",
       a: this.selfAddr,
@@ -210,7 +215,11 @@ export class Presence {
     } catch {
       return true;
     }
-    if (!msg?.t || !msg.a) return true;
+    if (!msg?.t || typeof msg.a !== "string" || !msg.a) return true;
+    // Colors are derived locally; never trust peer-supplied CSS.
+    const safeColors = pickUserColor(msg.a);
+    msg.c = safeColors.color;
+    msg.cl = safeColors.light;
 
     // Ignore our own frames (including host-relayed copies stamped with h:1).
     if (msg.a === this.selfAddr) return true;
@@ -266,11 +275,6 @@ export class Presence {
     } else if (msg.t === "writer" || msg.t === "in") {
       peer.writing = true;
       peer.writingUpdatedAt = Date.now();
-    } else if (msg.t === "join") {
-      // Answer join so the new peer learns about us immediately.
-      this.announceJoin();
-      // Also push current pointer if we have one pending.
-      if (this.pendingPos) this.flushPointer(true);
     }
 
     this.peers.set(msg.a, peer);

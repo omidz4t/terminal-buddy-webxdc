@@ -79,3 +79,11 @@ Cursors and reactions are **peer-to-peer**. The agent may log them for the TUI b
 
 - Adding new binary kinds: use unused ASCII capital letters and ignore unknown kinds.  
 - Presence: unknown `t` values should be ignored by clients.  
+
+
+Realtime sender identity is not exposed to TerminalBuddy. The address in an input
+or presence frame is self-declared; allow-list checks do not authenticate it.
+Clients also cannot authenticate output or exit frames. All participants must be
+trusted. Only explicitly hosted app instances accept input or resize frames;
+geometry is capped at 500 by 200 and output is batched up to 64 KiB at 50 frames/s.
+Presence joins are periodic and never answered with another join.

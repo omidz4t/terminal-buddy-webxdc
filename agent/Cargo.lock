@@ -5662,7 +5662,7 @@ dependencies = [
 
 [[package]]
 name = "terminal_buddy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -5671,6 +5671,7 @@ dependencies = [
  "ratatui",
  "rustyline",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

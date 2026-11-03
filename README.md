@@ -87,7 +87,7 @@ docker run --rm -i \
 ```
 
 - **`--invite`** — SecureJoin the group/contact and send the embedded mini app (always **single-quote** the URL; `#` is a shell comment).
-- **`--force-join`** / **`--no-force-join`** — Force SecureJoin, or reuse an existing group.
+- **`--force-join`** / **`--no-force-join`** — Resolve the supplied SecureJoin invite. Neither option selects a group by chat-list order.
 - **`--allowed-commands`** — **whitelist** only those commands (restricted shell). Without this, serve runs in **YOLO** (full shell) — avoid that when others can type.
 - **`--allowed`** — Alias for `--allowed-commands`.
 - **`--tmux`** / **`--no-tmux`** — YOLO + tmux, or force plain shell (`--tmux` ignored under whitelist).
@@ -311,7 +311,7 @@ Local identity lives under `agent/.dc-agent/` — **do not commit** it.
 
 ## Security notes
 
-- The host machine runs real commands. Prefer **whitelist** or **approve** when untrusted people can type.
+- The host machine runs real commands. Host only for trusted participants; whitelist and approve modes are not sandboxes.
 - `DC_INVITE` and `.env` are secrets for private groups — keep them out of git (`.env` is gitignored).
 - Profile name is set to **TerminalBuddy** with the project avatar on agent start.
 
@@ -349,3 +349,35 @@ Assets:
 ## Licence
 
 This project is licensed under the **GNU General Public License v3.0 or later** — see [`LICENCE`](./LICENCE).
+
+
+### Security boundaries and review fixes
+
+Realtime frames have no authenticated sender identity exposed to this app.
+The input allow-list checks a self-declared address: a participant can impersonate
+an allowed writer. Any participant can also forge terminal output or an exit frame
+in other viewers. Treat the displayed terminal and presence as trusted-group data,
+not authenticated host output. Party mode allows every participant to type.
+Whitelist mode restricts executable names but leaves arguments free; it does not
+isolate files, network access, or the host account. Approve mode requires the TUI;
+headless startup uses YOLO or the configured whitelist.
+
+Only app instances explicitly sent by this host are served. Sharing a replacement
+stops previous shells, and remote advertisements or frames cannot start shells.
+On startup a supplied invite determines the target, including with `--no-force-join`;
+an accepted existing group is reused only when its group ID matches that invite. Removing a member is detected by the
+15-second member refresh and stops hosting. Restart or share a fresh app to resume;
+old app topics cannot be revoked cryptographically and retain previously shared data.
+Changes to membership are not an instantaneous access revocation mechanism.
+
+Remote terminal geometry is limited to 500 columns by 200 rows. Output is coalesced
+into frames of at most 64 KiB with at most 50 broadcasts per second, retaining
+bounded backpressure. Presence announces periodically without answering joins.
+The host refreshes advertisements every 15 seconds; recovery after every kind of
+network stall is not guaranteed.
+
+The profile directory is set to mode 0700 on Unix and contains account secrets.
+Embedded packages are extracted into private random temporary directories.
+Use a dedicated unprivileged host account. `DC_TMUX_SESSION` selects the tmux
+session (default `terminalbuddy`); an existing session of that name is reused.
+Release CI pins core to the reviewed commit and actions to full commit hashes.
